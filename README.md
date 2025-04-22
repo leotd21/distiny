@@ -21,64 +21,80 @@ This generator works in **two main phases**:
 By decoupling marginals and correlations, we generate realistic yet controllable synthetic data.
 
 ---
+### Visual Overview
 
-## How It Works (Step-by-Step)
+```text
+[Raw Data]
+    ↓
+[Step 1: Column Type Inference]
+    ↓
+[Step 2: Fit Column Distributions]
+    ↓
+[Step 3: Normalize to [0,1]]
+    ↓
+[Step 4: Gaussianize Data]
+    ↓
+[Step 5: Learn Feature Correlation]
+    ↓
+[Step 6: Sample Synthetic Data]
+    ↓
+[Step 7: Reverse Transform to Raw Format]
+    ↓
+[Synthetic Data Output]
+```
 
-### Step 1: Column Type Inference
-- Automatically infer if a column is:
-  - `numeric`: continuous or wide-range integers
-  - `ordinal`: integer values with an inherent order (e.g., 1–5)
-  - `categorical`: strings or small sets of labels with no order
+---
 
-➡️ Alternatively, you can pass an explicit schema.
+## How It Works
+### Step 1: Understand the Column Types
+- We first figure out what kind of data each column has:
+  - Numbers with real values → **numeric**
+  - Ordered small integers → **ordinal**
+  - Text labels or limited categories → **categorical**
+
+(You can let the system guess or provide your own schema.)
 
 ---
 
 ### Step 2: Fit Marginal Distributions (Per Column)
+- Try out a few common distributions and pick the one that best matches the data. 
 - For each numeric or ordinal column:
   - Fit candidate distributions (Normal, Uniform, Exponential)
   - Select the best using **Kolmogorov-Smirnov (KS) statistic**
 - For categorical:
-  - Estimate the empirical distribution (value frequencies)
-
-**Reference**: [Kolmogorov–Smirnov test](https://en.wikipedia.org/wiki/Kolmogorov%E2%80%93Smirnov_test)
+  - Estimate the empirical distribution (value frequencies). Just count how often each label appears.
 
 ---
 
-### Step 3: Transform to Uniform [0, 1]
+### Step 3: Normalize Everything (Turn Data into 0 to 1 Range)
+- We apply a transformation that spreads all values into a range between 0 and 1. This makes different types of data easier to compare and mix.
 - Apply the **CDF** of the fitted distribution to each numeric/ordinal value.
 - This maps data to the **uniform space**, a key step for Copula modeling.
+---
+
+### Step 4: Make the Data Bell-Shaped
+- We turn those 0-to-1 values into values that follow a bell curve (like height in a population).
+- This helps us capture how features depend on each other.
+- Convert uniform values to standard normal via [probit function](https://en.wikipedia.org/wiki/Probit)
 
 ---
 
-### Step 4: Gaussianize (Probit Transform)
-- Convert uniform values to standard normal via:
-
-  \[ z = \Phi^{-1}(u) \]
-
-  Where \( \Phi^{-1} \) is the inverse CDF of the standard normal distribution.
-
-**Reference**: [Probit function](https://en.wikipedia.org/wiki/Probit_function)
+### Step 5: Understand How Features Relate
+- We measure how features move together — like whether salary increases with age — using a correlation matrix.
+- Fit Correlation (Gaussian Copula): on the Gaussianized matrix, compute the **correlation matrix**.
+- This captures dependencies between features under the Gaussian assumption. [Copula (statistics)](https://en.wikipedia.org/wiki/Copula_(probability_theory))
 
 ---
 
-### Step 5: Fit Correlation (Gaussian Copula)
-- On the Gaussianized matrix, compute the **correlation matrix**.
-- This captures dependencies between features under the Gaussian assumption.
-
-**Reference**: [Copula (statistics)](https://en.wikipedia.org/wiki/Copula_(probability_theory))
+### Step 6: Create New Synthetic Data
+- We use the learned relationships to create new rows of data that look like the original but are freshly generated.
+- Draw new samples from a multivariate normal distribution.
 
 ---
 
-### Step 6: Sample New Gaussianized Points
-- Draw new samples from a multivariate normal distribution:
-
-  \[ Z' \sim \mathcal{N}(0, \Sigma) \]
-
----
-
-### Step 7: Reverse Transform
-- Convert back to uniform space using standard normal CDF
+### Step 7: Convert Everything Back
+- We reverse all the earlier transformations to get the new data back into the original formats (e.g., labels for gender, integers for grade).
+- Reverse Transform: Convert back to uniform space using standard normal CDF
 - For each column:
   - Apply the **inverse CDF** of the fitted marginal to get synthetic values
   - For categorical: sample using multinomial distribution
@@ -97,7 +113,7 @@ By decoupling marginals and correlations, we generate realistic yet controllable
 
 ## Bug Fixes & Stability Improvements
 
-### 🛠 Issue: `SVD did not converge` during sampling
+### Issue: `SVD did not converge` during sampling
 This error was caused by `norm.ppf` encountering values of `0` or `1`, which results in `inf` and breaks the Gaussian Copula correlation matrix.
 
 **✅ Fix:**
@@ -109,7 +125,7 @@ cdf_vals = np.clip(cdf_vals, 1e-6, 1 - 1e-6)
 
 This prevents extreme values and ensures numerical stability when converting to Gaussian space.
 
-### 🛠 Issue: All synthetic columns inferred as `object` or string
+### Issue: All synthetic columns inferred as `object` or string
 Originally, the synthetic output was returned as an object array, leading to loss of numeric typing.
 
 **✅ Fix:**
@@ -120,7 +136,7 @@ The updated `sample()` method now returns well-typed NumPy arrays for downstream
 
 ---
 
-## Unit Testing
+## Sanity check
 - Generates synthetic data from a toy dataset with:
   - Numeric: `age`, `salary`
   - Ordinal: `grade` (1–5)
@@ -143,5 +159,5 @@ pytest tests/
 
 ---
 
-## 📜 License
+## License
 MIT
