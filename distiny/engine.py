@@ -43,61 +43,63 @@ class NormalDist:
             if np.abs(dmu) < self.tol and np.abs(dsigma) < self.tol:
                 break
 
-        self.mu_ = mu
-        self.sigma_ = sigma
-        return mu, sigma
+        self._mu = mu
+        self._sigma = sigma
+        return self
 
     def pdf(self, x):
-        return norm.pdf(x, loc=self.mu_, scale=self.sigma_)
+        return norm.pdf(x, loc=self._mu, scale=self._sigma)
 
     def cdf(self, x):
-        return norm.cdf(x, loc=self.mu_, scale=self.sigma_)
+        return norm.cdf(x, loc=self._mu, scale=self._sigma)
 
     def ppf(self, q):
-        return norm.ppf(q, loc=self.mu_, scale=self.sigma_)
+        return norm.ppf(q, loc=self._mu, scale=self._sigma)
 
     def get_params(self):
-        return self.mu_, self.sigma_
+        return self._mu, self._sigma
 
     def set_params(self, mu, sigma):
-        self.mu_ = mu
-        self.sigma_ = sigma
+        self._mu = mu
+        self._sigma = sigma
 
 class UniformDist:
     name = "uniform"
 
-    @staticmethod
-    def fit(data):
+    def fit(self, data):
         a, b = np.min(data), np.max(data)
-        return a, b
+        self._a, self._b = a, b
+        return self
 
-    @staticmethod
-    def cdf(x, params):
-        a, b = params
+    def cdf(self, x):
+        a, b = self._a, self._b
         return (x - a) / (b - a + 1e-8)
 
-    @staticmethod
-    def ppf(u, params):
-        a, b = params
+    def ppf(self, u):
+        a, b = self._a, self._b
         return a + u * (b - a)
+    
+    def get_params(self):
+        return self._a, self._b
 
 class ExponentialDist:
     name = "exponential"
 
-    @staticmethod
-    def fit(data):
+    def fit(self, data):
         lam = 1 / (np.mean(data) + 1e-8)
-        return lam,
+        self._lam = lam
+        return self
 
-    @staticmethod
-    def cdf(x, params):
-        lam, = params
+    def cdf(self, x):
+        lam = self._lam
         return 1 - np.exp(-lam * x)
 
-    @staticmethod
-    def ppf(u, params):
-        lam, = params
+    def ppf(self, u):
+        lam = self._lam
         return -np.log(1 - u + 1e-8) / lam
+    
+    def get_params(self):
+        return self._lam
 
 # -----------------------------
 # Utilities
@@ -111,11 +113,11 @@ def infer_column_type(col):
     else:
         return "numeric"
 
-def ks_statistic(data, cdf_func, params):
+def ks_statistic(data, cdf_func):
     sorted_data = np.sort(data)
     n = len(data)
     empirical_cdf = np.arange(1, n + 1) / n
-    theoretical_cdf = cdf_func(sorted_data, params)
+    theoretical_cdf = cdf_func(sorted_data)
     return np.max(np.abs(empirical_cdf - theoretical_cdf))
 
 def fit_best_distribution(data):
@@ -123,15 +125,18 @@ def fit_best_distribution(data):
     best_fit = None
     best_params = None
     best_score = float('inf')
-    for dist in candidates:
+    for dist_cls in candidates:
+        print(dist_cls.__name__)
         try:
-            params = dist.fit(data)
-            score = ks_statistic(data, dist.cdf, params)
+            dist = dist_cls().fit(data)
+            params = dist.get_params()
+            score = ks_statistic(data, dist.cdf)
             if score < best_score:
                 best_fit = dist
                 best_params = params
                 best_score = score
-        except:
+        except Exception as err:
+            print(f"fit_best_distribution: {err}")
             continue
     return best_fit, best_params
 
@@ -160,7 +165,7 @@ class HybridSynthesizer:
             if col_type in ["numeric", "ordinal"]:
                 col = col.astype(float)
                 dist, params = fit_best_distribution(col)
-                cdf_vals = dist.cdf(col, params)
+                cdf_vals = dist.cdf(col)
                 cdf_vals = np.clip(cdf_vals, 1e-6, 1 - 1e-6)  # Avoid infs in norm.ppf
                 z = norm.ppf(cdf_vals)
                 self.marginals.append((col_type, dist, params))
@@ -185,7 +190,7 @@ class HybridSynthesizer:
             if col_type in ["numeric", "ordinal"]:
                 dist, params = info
                 u = norm.cdf(mvn_samples[:, mvn_index])
-                col = dist.ppf(u, params)
+                col = dist.ppf(u)
                 if col_type == "ordinal":
                     col = np.round(col).astype(int)
                 synthetic_data.append(col)
