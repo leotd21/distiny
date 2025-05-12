@@ -43,3 +43,16 @@ def test_distribution_similarity():
         print(f"p-value: {pval}")
         assert pval > 0.05, f"Distribution mismatch in column {i} ({col_type})"
     print("Yay!!")
+
+
+def test_pdf_cdf_ppf_consistency():
+    np.random.seed(0)
+    data = np.random.normal(0, 1, size=1000)
+    opt = NormalDist(learning_rate=0.01, max_iter=1000, tol=1e-6)
+    opt.fit(data)
+
+    x = np.linspace(-3, 3, 100)
+    cdf_vals = opt.cdf(x)
+    ppf_vals = opt.ppf(cdf_vals)
+
+    assert np.allclose(x, ppf_vals, atol=1e-2), "PPF(CDF(x)) should ≈ x"
