@@ -1,7 +1,7 @@
 import numpy as np
 from collections import Counter
 from scipy.stats import ks_2samp, chisquare
-from distiny.engine import HybridSynthesizer
+from distiny.engine import HybridSynthesizer, NormalDist
 
 def compare_numeric(real_col, synth_col):
     stat, pval = ks_2samp(real_col.astype(float), synth_col.astype(float))
@@ -20,7 +20,7 @@ def test_distribution_similarity():
     # Generate real data
     np.random.seed(42)
     real_data = np.array([
-        np.random.normal(30, 5, 100),           # numeric: age
+        np.random.normal(20, 5, 100) + np.random.normal(60, 5, 100),           # numeric: age
         np.random.uniform(50000, 80000, 100),   # numeric: salary
         np.random.randint(1, 6, 100),           # ordinal
         np.random.choice(["M", "F"], 100)       # categorical
@@ -40,6 +40,6 @@ def test_distribution_similarity():
             _, pval = compare_numeric(real_col, synth_col)
         elif col_type == "categorical":
             _, pval = compare_categorical(real_col, synth_col)
-
+        print(f"p-value: {pval}")
         assert pval > 0.05, f"Distribution mismatch in column {i} ({col_type})"
     print("Yay!!")

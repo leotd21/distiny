@@ -6,23 +6,62 @@ from collections import Counter
 # Distributions
 # -----------------------------
 class NormalDist:
+    """
+    Fit a Gaussian distribution (mean and std) to numeric data using gradient descent
+    to minimize negative log-likelihood.
+    Can also behave like a distribution object with `pdf`, `cdf`, and `ppf` methods.
+    """
     name = "normal"
+    def __init__(self, learning_rate=0.01, max_iter=1000, tol=1e-6):
+        self.learning_rate = learning_rate
+        self.max_iter = max_iter
+        self.tol = tol
 
-    @staticmethod
-    def fit(data):
-        mu = np.mean(data)
-        sigma = np.std(data)
+    def _nll(self, x, mu, sigma):
+        """Negative log-likelihood of normal distribution."""
+        var = sigma ** 2
+        return 0.5 * np.sum(np.log(2 * np.pi * var) + ((x - mu) ** 2) / var)
+
+    def _grad(self, x, mu, sigma):
+        """Gradients of NLL with respect to mu and sigma."""
+        n = len(x)
+        dmu = -np.sum(x - mu) / (sigma ** 2)
+        dsigma = -n / sigma + np.sum(((x - mu) ** 2)) / (sigma ** 3)
+        return dmu, dsigma
+
+    def fit(self, x):
+        x = np.asarray(x)
+        mu = np.mean(x)
+        sigma = np.std(x)
+
+        for _ in range(self.max_iter):
+            dmu, dsigma = self._grad(x, mu, sigma)
+            mu -= self.learning_rate * dmu
+            sigma -= self.learning_rate * dsigma
+            sigma = max(sigma, 1e-6)
+
+            if np.abs(dmu) < self.tol and np.abs(dsigma) < self.tol:
+                break
+
+        self.mu_ = mu
+        self.sigma_ = sigma
         return mu, sigma
 
-    @staticmethod
-    def cdf(x, params):
-        mu, sigma = params
-        return norm.cdf(x, loc=mu, scale=sigma)
+    def pdf(self, x):
+        return norm.pdf(x, loc=self.mu_, scale=self.sigma_)
 
-    @staticmethod
-    def ppf(u, params):
-        mu, sigma = params
-        return norm.ppf(u, loc=mu, scale=sigma)
+    def cdf(self, x):
+        return norm.cdf(x, loc=self.mu_, scale=self.sigma_)
+
+    def ppf(self, q):
+        return norm.ppf(q, loc=self.mu_, scale=self.sigma_)
+
+    def get_params(self):
+        return self.mu_, self.sigma_
+
+    def set_params(self, mu, sigma):
+        self.mu_ = mu
+        self.sigma_ = sigma
 
 class UniformDist:
     name = "uniform"
